@@ -1,6 +1,6 @@
 const express = require('express')
 const app = express()
-const port = 3001
+const port = 3005
 const bodyParser = require('body-parser')
 const { json } = require('body-parser')
 
@@ -15,8 +15,8 @@ app.use(
 
 const Pool = require('pg').Pool
 const pool = new Pool({
-  user: 'nick',
-  password: 'nb084406',
+  user: 'admin',
+  password: 'admin',
   host: 'localhost',
   database: 'ecommerce_db',
   port: 5432,
@@ -99,6 +99,126 @@ app.get('/', getUsers)
   app.delete('/users/delete/:id', deleteUser)
   
   
+  const table_data = [{
+	  name:"manufacturer",
+	  required_fields:["companyname","contactname","contactemail","contactphonenumber"],
+	  all_fields:["companyname","contactname","contactemail","contactphonenumber"]
+  },{
+	  name:"customer",
+	  required_fields:["companyname","customername","customeremail","customerphonenumber"],
+	  all_fields:["companyname","customername","customeremail","customerphonenumber"]
+  },{
+	  name:"item",
+	  required_fields:["name","description"],
+	  all_fields:["name","description"]
+  },{
+	  name:"purchaseorder",
+	  required_fields:["manufacturerid","itemid","userid","quantity","dateordered"],
+	  all_fields:["manufacturerid","itemid","userid","quantity","dateordered","datereceived"]
+  },{
+	  name:"salesorder",
+	  required_fields:["customerid","itemid","userid","quantity","dateordered"],
+	  all_fields:["customerid","itemid","userid","quantity","dateordered","datereceived"]
+  },];
+  
+  var RequiredFieldsExist = (body,fields) => {
+	  for (var keys of fields) {
+		if (!(keys in body)) {
+			return false;
+		}
+	  }
+	  return true;
+  }
+  
+  var OutputRequiredFieldNames = (required_fields) => required_fields.reduce((result,field)=>(result==="")?result+=field:result+=","+field,"");
+  var OutputSqlArgumentNumbers = (required_fields) => required_fields.reduce((result,field,count)=>(result==="")?result+="$"+(count+1):result+=","+"$"+(count+1),"");
+  var OutputBodyData = (body,required_fields) => required_fields.filter((field)=>body[field]!==undefined).map((field)=>body[field]);
+  var CountFieldNames = (body,all_fields) => {
+	var counter = 0;
+	for (var i=0;i<all_fields.length;i++) {
+		var field = all_fields[i];
+		if (body[field]) {
+			counter++;
+		}
+	}
+	return counter;
+  }
+  var OutputSqlArgumentsAndFieldNames = (body,all_fields) => {
+	var finalStr = "";
+	var count = 0;
+	for (var i=0;i<all_fields.length;i++) {
+		var field = all_fields[i];
+		if (body[field]) {
+			if (finalStr==="") {
+				finalStr += field+"=$"+(count+++1) 
+			} else {
+				finalStr += ","+field+"=$"+(count+++1) 
+			}
+		}
+	}
+	return finalStr;
+  }
+  
+  
+  
+  table_data.forEach((table)=>{
+	  app.get("/"+table.name+"/view",(req,res)=>{
+		  pool.query('SELECT * FROM '+table.name+' ORDER BY id ASC', (error, results) => {
+		  if (error) {
+			throw error
+		  }
+		  res.status(200).json(results.rows)
+		})
+	  });
+	  app.get("/"+table.name+"/view/:id",(req,res)=>{
+		  pool.query('SELECT * FROM '+table.name+' where id=$1 ORDER BY id ASC', [req.params.id] , (error, results) => {
+		  if (error) {
+			throw error
+		  }
+		  res.status(200).json(results.rows)
+		})
+	  });
+	  app.post("/"+table.name+"/add",
+		  (req,res)=>{
+	  if (req.body) { 
+		if (RequiredFieldsExist(req.body,table.required_fields)) {
+			  pool.query('insert into '+table.name+'('+OutputRequiredFieldNames(table.required_fields)+') values('+OutputSqlArgumentNumbers(table.required_fields)+') returning *', OutputBodyData(req.body,table.required_fields) , (error, results) => {
+			  if (error) {
+				throw error
+			  }
+			  res.status(200).json(results.rows)
+			})
+			} else {
+				res.status(400).json("Missing a field! Required Fields: "+OutputRequiredFieldNames(table.required_fields));
+			}
+	  }});
+	  app.put("/"+table.name+"/update/:id",
+		  (req,res)=>{
+		  if (req.body && req.params.id && CountFieldNames(req.body,table.all_fields)>0) { 
+		  //console.log([...OutputBodyData(req.body,table.all_fields),Number(req.params.id)])
+		  //console.log("update "+table.name+" set "+OutputSqlArgumentsAndFieldNames(req.body,table.all_fields)+" where id=$"+(Object.keys(req.body).length+1)+" returning *")
+			  pool.query("update "+table.name+" set "+OutputSqlArgumentsAndFieldNames(req.body,table.all_fields)+" where id=$"+(CountFieldNames(req.body,table.all_fields)+1)+" returning *", [...OutputBodyData(req.body,table.all_fields),req.params.id] , (error, results) => {
+				  if (error) {
+					throw error
+				  }
+				  res.status(200).json(results.rows)
+			})
+		  } else {
+			res.status(400).json("Missing id or invalid fields! Valid fields are: "+OutputRequiredFieldNames(table.all_fields));
+		  }});
+	  app.delete("/"+table.name+"/delete/:id",
+		  (req,res)=>{
+		  if (req.params.id) { 
+			  pool.query("delete from "+table.name+" where id=$1 returning *", [req.params.id] , (error, results) => {
+				  if (error) {
+					throw error
+				  }
+				  res.status(200).json(results.rows)
+			})
+		  } else {
+			res.status(400).json("Missing id!")
+		  }});
+  })
 
 
 
