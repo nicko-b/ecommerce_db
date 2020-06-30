@@ -246,10 +246,66 @@ const Item = (p)=>{
     )
 }
 
-const SalesOrder = (p)=>{
+const User = (p)=>{
+  var contents;
+  if (p.users) {
+    var thisUser = p.users.filter((user)=>user.id==p.id)[0];
+    if (thisUser) {
+      contents = thisUser.firstname +" "+thisUser.lastname
+    }
+  }
   return (
     <>
-    {<Item id={p.id} items={p.items}/>}x{p.order.quantity} - <b>Submitted </b> {p.order.dateordered} - {(p.order.datereceived)?p.order.datereceived:"Order Pending..."}
+    {contents}
+    </>
+  )
+}
+
+const Manufacturer = (p)=>{
+  var contents;
+  if (p.manufacturers) {
+    var thisManufacturer = p.manufacturers.filter((manufacturer)=>manufacturer.id==p.id)[0];
+    if (thisManufacturer) {
+      contents = thisManufacturer.companyname
+    }
+  }
+  return (
+    <>
+    {contents}
+    </>
+  )
+}
+
+const SalesOrder = (p)=>{
+
+  const CompleteOrder=()=>{
+    var myObj={datereceived:moment().format()}
+    axios.put("http://localhost:3001/salesorder/setreceived/"+p.order.id,myObj)
+    .then((data)=>{
+      p.setReload(true)
+    })
+  }
+
+  return (
+    <>
+    {(p.completeOrder && !p.order.datereceived)?<button onClick={()=>{CompleteOrder()}}>Complete Order</button>:<></>}{<Item id={p.id} items={p.items}/>}x{p.order.quantity} - <b>Submitted </b> to <b><User id={p.order.userid} users={p.users}/></b><br/><br/> <b>Ordered:</b> {p.order.dateordered}  -  <b>Received:</b> {(p.order.datereceived)?<div className="orderdone">{p.order.datereceived}</div>:"Order Pending..."}
+  </>
+  )
+}
+
+const PurchaseOrder = (p)=>{
+
+  const CompleteOrder=()=>{
+    var myObj={datereceived:moment().format()}
+    axios.put("http://localhost:3001/purchaseorder/setreceived/"+p.order.id,myObj)
+    .then((data)=>{
+      p.setReload(true)
+    })
+  }
+
+  return (
+    <>
+    {(p.completeOrder && !p.order.datereceived)?<button onClick={()=>{CompleteOrder()}}>Complete Order</button>:<></>}{<Item id={p.id} items={p.items}/>}x{p.order.quantity} - <b>Submitted </b> to <b><Manufacturer id={p.order.manufacturerid} manufacturers={p.manufacturers}/></b><br/><br/> <b>Ordered:</b> {p.order.dateordered}  -  <b>Received:</b> {(p.order.datereceived)?<div className="orderdone">{p.order.datereceived}</div>:"Order Pending..."}
   </>
   )
 }
@@ -272,6 +328,160 @@ const UsersSelectionList = (p)=>{
     </select>
     </>
   );
+}
+
+const ManufacturerSelectionList = (p)=>{
+  return (
+    <>
+    <select name="manufacturer" id="manufacturer" value={p.manufacturerId} onChange={(e)=>{p.setManufacturerId(e.currentTarget.value);}}>
+       {p.manufacturers.map((manufacturer)=><option value={manufacturer.id}>[{manufacturer.id}] {manufacturer.companyname}</option>)}
+    </select>
+    </>
+  );
+}
+
+const ModifyProfilePage = (p)=>{
+  const [fields,setFields] = useState([]);
+  const [updateRequired,setUpdateRequired] = useState(true);
+  const [statusMessage,setStatusMessage] = useState("Retrieving data...");
+  const [updatingProfile,setUpdatingProfile] = useState(false);
+  //p.users,p.role,p.callback,p.username
+  var data;
+
+  if (updateRequired) {  
+    setUpdateRequired(false)
+    switch (p.role) {
+      case "User":{
+        var user = p.users.filter((user)=>user.id===p.id)[0]
+        setStatusMessage("")
+        setFields([{name:"First Name",value:"firstname",field:user.firstname},
+        {name:"Last Name",value:"lastname",field:user.lastname},
+        {name:"Email",value:"email",field:user.email}])
+      }break;
+      case "Customer":{
+        axios.get("http://localhost:3001/customer/view/"+p.id)
+        .then((data)=>{
+          if (Array.isArray(data.data) && data.data.length>0) {
+            setFields([{name:"Company Name",value:"companyname",field:data.data[0].companyname},
+            {name:"Name",value:"customername",field:data.data[0].customername},
+            {name:"Email",value:"customeremail",field:data.data[0].customeremail},
+            {name:"Phone Number",value:"customerphonenumber",field:data.data[0].customerphonenumber}])
+            setStatusMessage("")
+          } else {
+            Promise.reject(new Error("Failed to retrieve data!"))
+          }
+        })
+        .catch((err)=>{
+          setStatusMessage(err.message)
+        })
+      }break;
+      case "Manufacturer":{
+        axios.get("http://localhost:3001/manufacturer/view/"+p.id)
+        .then((data)=>{
+          if (Array.isArray(data.data) && data.data.length>0) {
+            setFields([{name:"Company Name",value:"companyname",field:data.data[0].companyname},
+            {name:"Contact Name",value:"contactname",field:data.data[0].contactname},
+            {name:"Contact Email",value:"contactemail",field:data.data[0].contactemail},
+            {name:"Contact Phone Number",value:"contactphonenumber",field:data.data[0].contactphonenumber}])
+            setStatusMessage("")
+          } else {
+            Promise.reject(new Error("Failed to retrieve data!"))
+          }
+        })
+        .catch((err)=>{
+          setStatusMessage(err.message)
+        })
+      }break;
+    }
+
+  }
+
+  function Validated() {
+    var inputs = document.getElementsByTagName("input");
+    setStatusMessage("")
+    for (var i=0;i<inputs.length;i++){var input=inputs[i]; input.classList.remove("error")}
+    
+    var empty_inputs = [] 
+    for (var i=0;i<inputs.length;i++) {var input=inputs[i]; if (input.value.length===0){empty_inputs.push(input)}};
+
+    if (empty_inputs.length>0) {
+      setStatusMessage(<>
+        <h2 style={{color:"red"}}>Please fix invalid fields!</h2>
+      </>);
+      for (var i=0;i<empty_inputs.length;i++){var input=empty_inputs[i]; input.classList.add("error")}
+      return false;
+    } else {
+        return true;
+    }
+  }
+
+  function UpdateProfile() {
+    setStatusMessage(<><h2>Contacting Server...</h2>
+      Submitting updated profile...</>)
+      switch (p.role) {
+        case "User":{
+          var myObj = {}
+          fields.forEach((field)=>{myObj[field.value]=document.getElementById(field.value).value})
+          axios.put("http://localhost:3001/users/update/"+p.id,myObj)
+          .then((data)=>{
+              setStatusMessage("Success! Profile updated. Returning to previous page.")
+              p.setReloadUserDatabase(true)
+              p.call();
+          })
+          .catch((err)=>{
+            setUpdatingProfile(false)
+            setStatusMessage(err.message)
+          })
+        }break;
+        case "Customer":{
+          var myObj = {}
+          fields.forEach((field)=>{myObj[field.value]=document.getElementById(field.value).value})
+          axios.put("http://localhost:3001/customer/update/"+p.id,myObj)
+          .then((data)=>{
+              setStatusMessage("Success! Profile updated. Returning to previous page.")
+              p.call();
+          })
+          .catch((err)=>{
+            setUpdatingProfile(false)
+            setStatusMessage(err.message)
+          })
+        }break;
+        case "Manufacturer":{
+          var myObj = {}
+          fields.forEach((field)=>{myObj[field.value]=document.getElementById(field.value).value})
+          axios.put("http://localhost:3001/manufacturer/update/"+p.id,myObj)
+          .then((data)=>{
+              setStatusMessage("Success! Profile updated. Returning to previous page.")
+              p.call();
+          })
+          .catch((err)=>{
+            setUpdatingProfile(false)
+            setStatusMessage(err.message)
+          })
+        }break;
+    }
+  }
+
+  if (updatingProfile) {
+    return (
+      <>
+      {statusMessage}
+      </>
+    )
+  } else {
+    return (
+      <>
+        <button onClick={()=>{p.call()}}>{"< Back"}</button>
+        <br/>
+        <h3>Modify Profile for {p.username}</h3>
+        <b>Role: {p.role}</b><br/><br/>
+        {statusMessage}<br/>
+        {(fields)?fields.map((field,count)=><><label for={field.value}>{field.name}</label><input type="text" name={field.value} id={field.value} defaultValue={field.field}/><br/></>):<></>}
+        <button onClick={()=>{if (Validated()) {UpdateProfile()}}}>Update Profile</button>
+        <br/>
+      </>
+    )
+  }
 }
 
 const CreateCustomerSalesOrder = (p)=>{
@@ -304,7 +514,7 @@ const CreateCustomerSalesOrder = (p)=>{
   if (status===null) {
     return (
       <>
-        {lastError}
+        {lastError}<br/>
         <button onClick={()=>{p.setPage(null);}}>{"< Back"}</button>
         <br/><br/>
         <label for="item"><b>Requested Item:</b></label><ItemsSelectionList itemId={itemId} setItemId={setItemId} items={p.items}/> <label for="quantity"><b>Quantity:</b></label> x<input type="number" style={{width:"60px"}} name="quantity" id="quantity" value={itemQuantity} onChange={(e)=>{setItemQuantity(e.currentTarget.value)}}/>
@@ -344,14 +554,47 @@ const DisplayCustomerOrders = (p)=>{
   return(
     <>
     <div className="row">
-      <div className="offset-md-8 col-md-4">
+      <div className="col-md-4">
+        <button onClick={()=>{p.setPage("PROFILE")}}>Edit Profile</button>
+      </div>
+      <div className="offset-md-4 col-md-4">
         <button onClick={()=>{p.setPage("PLACEORDER")}}>New Sales Order +</button>
       </div>
     </div>
     <div className="row">
       <div className="col-md-12">
       {status}
-      {orders.map((order)=><SalesOrder order={order} id={order.itemid} items={p.items}/>)}
+      {orders.map((order)=><div className="order"><SalesOrder order={order} users={p.users} id={order.itemid} items={p.items}/></div>)}
+      </div>
+    </div>
+    </>
+  )
+}
+
+const DisplayUserOrders = (p)=>{
+  const [status,setStatus] = useState("Fetching orders...");
+  const [orders,setOrders] = useState([]);
+  const [reload,setReload] = useState(true);
+
+  var FetchOrders = ()=>{
+    axios.get("http://localhost:3001/salesorder/byuserid/"+p.id)
+    .then((data)=>{
+      setOrders(data.data);
+      setStatus("Done! ("+data.data.length+") orders found.")
+    })
+  }
+
+  if (reload) {
+    FetchOrders();
+    setReload(false)
+  }
+
+  return(
+    <>
+    <div className="row">
+      <div className="col-md-12">
+      {status}
+      {orders.map((order)=><div className="order"><SalesOrder setReload={setReload} completeOrder={p.completeOrder} order={order} users={p.users} id={order.itemid} items={p.items}/></div>)}
       </div>
     </div>
     </>
@@ -363,15 +606,250 @@ const CustomerPage = (p)=>{
 
   var contents;
 
+  const changePage = ()=>{
+    setPage(null)
+  }
+
   switch (page) {
     case "PLACEORDER":{
       contents=<CreateCustomerSalesOrder items={p.items} id={p.id} users={p.users} setPage={setPage}/>;
     }break;
     case "PROFILE":{
-
+      contents=<ModifyProfilePage id={p.id} users={p.users} role={p.role} call={changePage} username={p.username}/>;
     }break;
     default:{
-      contents=<DisplayCustomerOrders setPage={setPage} id={p.id} items={p.items}/>;
+      contents=<DisplayCustomerOrders setPage={setPage} id={p.id} items={p.items} users={p.users}/>;
+    }
+  }
+
+  return (
+    <>
+      {contents}
+    </>
+  );
+}
+
+const CreateUserPurchaseOrder = (p)=>{
+  const [itemId,setItemId] = useState(p.items[0].id);
+  const [itemQuantity,setItemQuantity] = useState(1);
+  const [manufacturerId,setManufacturerId] = useState(p.manufacturers[0].id);
+  const [status,setStatus] = useState(null);
+  const [lastError,setLastError] = useState(null);
+
+  function SubmitPurchaseOrder(){
+    setStatus("Submitting Purchase Order...");
+    var obj = {userid:p.id,itemid:itemId,manufacturerid:manufacturerId,quantity:itemQuantity,dateordered:moment().format()}
+    axios.post("http://localhost:3001/purchaseorder/add",obj)
+    .then((data)=>{
+      if (Array.isArray(data.data) && data.data.length>0) {
+        //Successfully submitted order.
+        setStatus("Order submitted! Returning back to orders page...")
+        p.setPage(null);
+      } else {
+        Promise.reject("Order failed to submit!")
+        setStatus(null)
+      }
+    })
+    .catch((err)=>{
+      setLastError(err.message)
+      setStatus(null)
+    })
+  }
+
+  if (status===null) {
+    return (
+      <>
+        {lastError}<br/>
+        <button onClick={()=>{p.setPage(null);}}>{"< Back"}</button>
+        <br/><br/>
+        <label for="item"><b>Requested Item:</b></label><ItemsSelectionList itemId={itemId} setItemId={setItemId} items={p.items}/> <label for="quantity"><b>Quantity:</b></label> x<input type="number" style={{width:"60px"}} name="quantity" id="quantity" value={itemQuantity} onChange={(e)=>{setItemQuantity(e.currentTarget.value)}}/>
+        <Item id={itemId} items={p.items}/>
+        <br/><br/>
+        <label for="user"><b>Manufacturer:</b></label><ManufacturerSelectionList manufacturers={p.manufacturers} manufacturerId={manufacturerId} setManufacturerId={setManufacturerId}/>
+        <button onClick={()=>{SubmitPurchaseOrder()}}>Submit</button>
+      </>
+    )
+  } else {
+    return (
+      <>
+        {status}
+      </>
+    )
+  }
+}
+
+const DisplayPurchaseOrders = (p)=>{
+  const [status,setStatus] = useState("Fetching orders...");
+  const [orders,setOrders] = useState([]);
+  const [reload,setReload] = useState(true);
+
+  var FetchOrders = ()=>{
+    axios.get("http://localhost:3001/purchaseorder/byuserid/"+p.id)
+    .then((data)=>{
+      setOrders(data.data);
+      setStatus("Done! ("+data.data.length+") orders found.")
+    })
+  }
+
+  if (reload) {
+    FetchOrders();
+    setReload(false)
+  }
+
+  return(
+    <>
+    <div className="row">
+      <div className="col-md-12">
+      {status}
+      {orders.map((order)=><div className="order"><PurchaseOrder setReload={setReload} completeOrder={p.completeOrder} order={order} manufacturers={p.manufacturers} id={order.itemid} items={p.items}/></div>)}
+      </div>
+    </div>
+    </>
+  )
+}
+
+const DisplayManufacturerPurchaseOrders = (p)=>{
+  const [status,setStatus] = useState("Fetching orders...");
+  const [orders,setOrders] = useState([]);
+  const [reload,setReload] = useState(true);
+
+  var FetchOrders = ()=>{
+    axios.get("http://localhost:3001/purchaseorder/bymanufacturerid/"+p.id)
+    .then((data)=>{
+      setOrders(data.data);
+      setStatus("Done! ("+data.data.length+") orders found.")
+    })
+  }
+
+  if (reload) {
+    FetchOrders();
+    setReload(false)
+  }
+
+  return(
+    <>
+    <div className="row">
+      <div className="col-md-12">
+      {status}
+      {orders.map((order)=><div className="order"><PurchaseOrder setReload={setReload} completeOrder={p.completeOrder} order={order} manufacturers={p.manufacturers} id={order.itemid} items={p.items}/></div>)}
+      </div>
+    </div>
+    </>
+  )
+}
+
+const UserPage = (p)=>{
+  const [page,setPage] = useState(null); //This view has 3 pages: View orders, place orders, view / edit profile
+
+  var contents;
+
+  const changePage = ()=>{
+    setPage(null)
+  }
+
+  switch (page) {
+    case "PLACEORDER":{
+      contents=<CreateUserPurchaseOrder items={p.items} id={p.id} manufacturers={p.manufacturers} users={p.users} setPage={setPage}/>;
+    }break;
+    case "PROFILE":{
+      contents=<ModifyProfilePage setReloadUserDatabase={p.setReloadUserDatabase} id={p.id} users={p.users} role={p.role} call={changePage} username={p.username}/>;
+    }break;
+    default:{
+      contents=
+      <>
+      <div className="row">
+        <div className="col-md-4">
+          <button onClick={()=>{setPage("PROFILE")}}>Edit Profile</button>
+        </div>
+        <div className="offset-md-4 col-md-4">
+          <button onClick={()=>{setPage("PLACEORDER")}}>New Purchase Order +</button>
+        </div>
+      </div>
+      <div className="row">
+        <div className="col-md-6">
+          <h3>Current Purchase Orders:</h3>
+          <DisplayPurchaseOrders setPage={setPage} id={p.id} items={p.items} manufacturers={p.manufacturers}/>
+        </div>
+        <div className="col-md-6">
+          <h3>Your Sales Orders:</h3>
+          <DisplayUserOrders completeOrder={true} setPage={setPage} id={p.id} items={p.items} users={p.users}/>
+        </div>
+      </div>
+      </>
+    }
+  }
+
+  return (
+    <>
+      {contents}
+    </>
+  );
+}
+
+const ModifyProducts = (p)=>{
+  const [disabled,setDisabled] = useState(false)
+  const [name,setName] = useState("")
+  const [description,setDescription] = useState("")
+
+  function SubmitItem() {
+    setDisabled(true)
+    var myObj={name:document.getElementById("name").value,description:document.getElementById("description").value}
+    axios.post("http://localhost:3001/item/add",myObj)
+    .then((data)=>{
+      p.setReloadItemDatabase(true)
+      setDisabled(false)
+    })
+  }
+
+    return (
+      <>
+        <button onClick={()=>{p.call()}}>{"< Back"}</button>
+        <br/><br/>
+        {p.items.map((item)=><Item items={p.items} id={item.id}/>)}
+        <div className="row text-center">
+          <div className="col-md-4"><label for="name"><b>Item Name:</b></label><input type="text" onChange={(e)=>{setName(e.currentTarget.value)}} value={name} id="name" disabled={disabled} /></div>
+          <div className="col-md-8"><label for="description"><b>Description:</b></label><input type="text" onChange={(e)=>{setDescription(e.currentTarget.value)}} disabled={disabled} value={description} id="description"/></div>
+          <br/>
+          <button disabled={disabled} onClick={()=>{SubmitItem()}}>Submit New Product</button>
+        </div>
+      </>
+    );
+}
+
+const ManufacturerPage = (p)=>{
+  const [page,setPage] = useState(null); //This view has 3 pages: Create new Products, View orders, view / edit profile
+
+  var contents;
+
+  const changePage = ()=>{
+    setPage(null)
+  }
+
+  switch (page) {
+    case "PRODUCTS":{
+      contents=<ModifyProducts setReloadItemDatabase={p.setReloadItemDatabase} id={p.id} items={p.items} users={p.users} role={p.role} call={changePage} username={p.username}/>;
+    }break;
+    case "PROFILE":{
+      contents=<ModifyProfilePage id={p.id} users={p.users} role={p.role} call={changePage} username={p.username}/>;
+    }break;
+    default:{
+      contents=
+      <>
+      <div className="row">
+        <div className="col-md-4">
+          <button onClick={()=>{setPage("PROFILE")}}>Edit Profile</button>
+        </div>
+        <div className="offset-md-4 col-md-4">
+          <button onClick={()=>{setPage("PRODUCTS")}}>+ Add Products</button>
+        </div>
+      </div>
+      <div className="row">
+        <div className="col-md-12">
+          <h3>Your Purchase Orders:</h3>
+          <DisplayManufacturerPurchaseOrders completeOrder={true} setPage={setPage} id={p.id} items={p.items} manufacturers={p.manufacturers}/>
+        </div>
+      </div>
+      </>
     }
   }
 
@@ -385,6 +863,8 @@ const CustomerPage = (p)=>{
 function App() {
   const [itemDatabase,setItemDatabase] = useState([]);
   const [userDatabase,setUserDatabase] = useState([]);
+  const [customerDatabase,setCustomerDatabase] = useState([]);
+  const [manufacturerDatabase,setManufacturerDatabase] = useState([]);
   const [password,setPassword] = useState(null);
   const [username,setUsername] = useState(null);
   const [uniqueid,setUniqueId] = useState(null);
@@ -394,6 +874,8 @@ function App() {
   const [loginPageMessage,setLoginPageMessage] = useState("");
   const [reloadItemDatabase,setReloadItemDatabase] = useState(true);
   const [reloadUserDatabase,setReloadUserDatabase] = useState(true);
+  const [reloadCustomerDatabase,setReloadCustomerDatabase] = useState(true);
+  const [reloadManufacturerDatabase,setReloadManufacturerDatabase] = useState(true);
 
   if (reloadItemDatabase) {
     axios.get("http://localhost:3001/item/view")
@@ -407,6 +889,20 @@ function App() {
     .then((data)=>{
       setUserDatabase(data.data);
       setReloadUserDatabase(false);
+    })
+  }
+  if (reloadCustomerDatabase) {
+    axios.get("http://localhost:3001/customer/view")
+    .then((data)=>{
+      setCustomerDatabase(data.data);
+      setReloadCustomerDatabase(false);
+    })
+  }
+  if (reloadManufacturerDatabase) {
+    axios.get("http://localhost:3001/manufacturer/view")
+    .then((data)=>{
+      setManufacturerDatabase(data.data);
+      setReloadManufacturerDatabase(false);
     })
   }
 
@@ -429,18 +925,20 @@ function App() {
     }break;
     case "MANUFACTURER":{
       contents=<div className="col-md-12">
-      <h3>This is the Manufacturer's Page!</h3>
+      <h3>Manufacturer's Dashboard</h3>
+      <ManufacturerPage setReloadItemDatabase={setReloadItemDatabase} setReloadManufacturerDatabase={setReloadManufacturerDatabase} id={uniqueid} customers={customerDatabase} manufacturers={manufacturerDatabase} items={itemDatabase} username={username} role={role} users={userDatabase} />
       </div>;
     }break;
     case "USER":{
       contents=<div className="col-md-12">
-      <h3>This is the User's Page!</h3>
+      <h3>User Dashboard</h3>
+      <UserPage setReloadUserDatabase={setReloadUserDatabase} id={uniqueid} customers={customerDatabase} manufacturers={manufacturerDatabase} items={itemDatabase} username={username} role={role} users={userDatabase} />
       </div>;
     }break;
     case "CUSTOMER":{
       contents=<div className="col-md-12">
       <h3>Customer Dashboard</h3>
-      <CustomerPage id={uniqueid} items={itemDatabase} users={userDatabase} />
+      <CustomerPage id={uniqueid} items={itemDatabase} username={username} role={role} users={userDatabase} />
       </div>;
     }break;
   }
